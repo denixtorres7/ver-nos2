@@ -428,7 +428,7 @@ select{
 
     <section class="pagina poema"><div class="globo negro"><div class="texto">cuando estoy al sol, soy negro,</div></div></section>
 
-    <section class="pagina poema enfermedad"><div class="globo negro inestable"><div class="texto">cuando estoy enfermo, soy negro,</div></div><p class="indicacion">Inclina</p><button class="simulador-desktop" onclick="simularInteraccion('desmayo')">Simular desmayo</button></section>
+    <section class="pagina poema enfermedad"><div class="globo negro inestable"><div class="texto">cuando estoy enfermo, soy negro,</div></div><p class="indicacion">Inclina</p><button class="simulador-desktop" onclick="simularInteraccion('desmayo')">Inclina</button></section>
 
     <section class="pagina poema muerte"><div class="globo negro muerte-negra"><div class="texto">cuando muera, seré negro.</div></div></section>
 
@@ -440,11 +440,11 @@ select{
 
     <section class="pagina poema calor"><div class="globo rojo"><div class="texto">cuando te pones al sol, eres rojo,</div></div><button class="accion-contextual" onclick="sonidoCalor()">Calor</button></section>
 
-    <section class="pagina poema frio-pagina"><div class="globo azul"><div class="texto">cuando tienes frío, eres azul,</div></div><p class="indicacion">Sopla</p><button class="simulador-desktop" onclick="simularInteraccion('frio')">Simular soplido</button></section>
+    <section class="pagina poema frio-pagina"><div class="globo azul"><div class="texto">cuando tienes frío, eres azul,</div></div><p class="indicacion">Sopla</p><button class="simulador-desktop" onclick="simularInteraccion('frio')">Sopla</button></section>
 
-    <section class="pagina poema miedo-pagina"><div class="globo verde"><div class="texto">cuando tienes miedo, te pones verde,</div></div><button class="accion-contextual" id="mantenerMiedo">Mantén</button><button class="simulador-desktop" onclick="simularInteraccion('miedo')">Simular vibración</button></section>
+    <section class="pagina poema miedo-pagina"><div class="globo verde"><div class="texto">cuando tienes miedo, te pones verde,</div></div><button class="accion-contextual" id="mantenerMiedo">Mantén</button><button class="simulador-desktop" onclick="simularInteraccion('miedo')">Mantén</button></section>
 
-    <section class="pagina poema enfermedad"><div class="globo amarillo inestable"><div class="texto">cuando estás enfermo, eres amarillo,</div></div><p class="indicacion">Inclina</p><button class="simulador-desktop" onclick="simularInteraccion('desmayo')">Simular desmayo</button></section>
+    <section class="pagina poema enfermedad"><div class="globo amarillo inestable"><div class="texto">cuando estás enfermo, eres amarillo,</div></div><p class="indicacion">Inclina</p><button class="simulador-desktop" onclick="simularInteraccion('desmayo')">Inclina</button></section>
 
     <section class="pagina poema muerte"><div class="globo gris muerte-gris"><div class="texto">cuando mueras, serás gris.</div></div></section>
 
@@ -545,6 +545,7 @@ function mostrar(){
     window.audioCalor.pause();
     window.audioCalor.currentTime=0;
   }
+  if(typeof detenerSonidoMiedo==="function") detenerSonidoMiedo();
   document.querySelectorAll(".globo.rabia, .globo.frio, .globo.desmayo").forEach(g=>{
     g.classList.remove("rabia","frio","desmayo");
   });
@@ -690,16 +691,49 @@ function activarFrio(){
   setTimeout(()=>globo.classList.remove("frio"),1100);
 }
 
+function latido(){
+  const ctx=contextoAudio();
+  const ahora=ctx.currentTime;
+  // Dos golpes graves "lub-dub", con entrada corta y caída redonda.
+  [0, .18].forEach((offset,i)=>{
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    const filtro=ctx.createBiquadFilter();
+    osc.type="sine";
+    osc.frequency.setValueAtTime(i===0 ? 72 : 58, ahora+offset);
+    osc.frequency.exponentialRampToValueAtTime(42, ahora+offset+.16);
+    filtro.type="lowpass"; filtro.frequency.value=180;
+    gain.gain.setValueAtTime(.0001, ahora+offset);
+    gain.gain.exponentialRampToValueAtTime(i===0 ? .18 : .13, ahora+offset+.018);
+    gain.gain.exponentialRampToValueAtTime(.0001, ahora+offset+.19);
+    osc.connect(filtro); filtro.connect(gain); gain.connect(ctx.destination);
+    osc.start(ahora+offset); osc.stop(ahora+offset+.22);
+  });
+}
+function iniciarSonidoMiedo(){
+  latido();
+  if(window.intervaloCorazon) clearInterval(window.intervaloCorazon);
+  window.intervaloCorazon=setInterval(latido,760);
+}
+function detenerSonidoMiedo(){
+  if(window.intervaloCorazon){
+    clearInterval(window.intervaloCorazon);
+    window.intervaloCorazon=null;
+  }
+}
+
 function iniciarMiedo(){
   if(!paginas[pagina].classList.contains("miedo-pagina")) return;
   const globo=paginas[pagina].querySelector(".globo");
   globo.classList.add("pulso");
+  iniciarSonidoMiedo();
   if(navigator.vibrate) navigator.vibrate([80,620,80,620,80]);
   miedoInterval=setInterval(()=>{
     if(navigator.vibrate) navigator.vibrate([80,620,80]);
   },1450);
 }
 function detenerMiedo(){
+  detenerSonidoMiedo();
   clearInterval(miedoInterval); miedoInterval=null;
   document.querySelectorAll(".pulso").forEach(x=>x.classList.remove("pulso"));
   if(navigator.vibrate) navigator.vibrate(0);
@@ -781,6 +815,7 @@ function simularInteraccion(tipo){
   }
   if(tipo==="miedo"){
     globo.classList.add("pulso");
+    iniciarSonidoMiedo();
     // En computador representamos visualmente la vibración/haptics que sí ocurre en móvil.
     globo.animate([
       {transform:"translateX(0) scale(1)"},
@@ -788,7 +823,10 @@ function simularInteraccion(tipo){
       {transform:"translateX(5px) scale(.96)"},
       {transform:"translateX(0) scale(1)"}
     ],{duration:720,iterations:3,easing:"ease-in-out"});
-    setTimeout(()=>globo.classList.remove("pulso"),2200);
+    setTimeout(()=>{
+      globo.classList.remove("pulso");
+      detenerSonidoMiedo();
+    },2200);
   }
   if(tipo==="desmayo"){
     globo.classList.remove("desmayo");
