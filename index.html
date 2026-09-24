@@ -245,6 +245,16 @@ p{
 }
 .inestable{
   transition:transform .12s ease;
+  transform-origin:50% 100%;
+}
+.globo.desmayo{
+  animation:desmayarse 1.45s cubic-bezier(.36,.07,.19,.97) forwards;
+}
+@keyframes desmayarse{
+  0%{transform:perspective(700px) rotateX(0deg) translateY(0) scale(1)}
+  22%{transform:perspective(700px) rotateX(-7deg) translateY(2px) scale(.99)}
+  55%{transform:perspective(700px) rotateX(42deg) translateY(16px) scale(.96)}
+  100%{transform:perspective(700px) rotateX(72deg) translateY(34px) scale(.91)}
 }
 
 button,select{
@@ -418,7 +428,7 @@ select{
 
     <section class="pagina poema"><div class="globo negro"><div class="texto">cuando estoy al sol, soy negro,</div></div></section>
 
-    <section class="pagina poema enfermedad"><div class="globo negro inestable"><div class="texto">cuando estoy enfermo, soy negro,</div></div><p class="indicacion">Inclina</p><button class="simulador-desktop" onclick="simularInteraccion('inclina')">Simular inclinación</button></section>
+    <section class="pagina poema enfermedad"><div class="globo negro inestable"><div class="texto">cuando estoy enfermo, soy negro,</div></div><p class="indicacion">Inclina</p><button class="simulador-desktop" onclick="simularInteraccion('desmayo')">Simular desmayo</button></section>
 
     <section class="pagina poema muerte"><div class="globo negro muerte-negra"><div class="texto">cuando muera, seré negro.</div></div></section>
 
@@ -434,7 +444,7 @@ select{
 
     <section class="pagina poema miedo-pagina"><div class="globo verde"><div class="texto">cuando tienes miedo, te pones verde,</div></div><button class="accion-contextual" id="mantenerMiedo">Mantén</button><button class="simulador-desktop" onclick="simularInteraccion('miedo')">Simular vibración</button></section>
 
-    <section class="pagina poema enfermedad"><div class="globo amarillo inestable"><div class="texto">cuando estás enfermo, eres amarillo,</div></div><p class="indicacion">Inclina</p><button class="simulador-desktop" onclick="simularInteraccion('inclina')">Simular inclinación</button></section>
+    <section class="pagina poema enfermedad"><div class="globo amarillo inestable"><div class="texto">cuando estás enfermo, eres amarillo,</div></div><p class="indicacion">Inclina</p><button class="simulador-desktop" onclick="simularInteraccion('desmayo')">Simular desmayo</button></section>
 
     <section class="pagina poema muerte"><div class="globo gris muerte-gris"><div class="texto">cuando mueras, serás gris.</div></div></section>
 
@@ -530,8 +540,13 @@ function restaurarExtremos(){
 
 
 function mostrar(){
-  document.querySelectorAll(".globo.rabia, .globo.frio").forEach(g=>{
-    g.classList.remove("rabia","frio");
+  // Todo efecto sonoro o transitorio pertenece a su página.
+  if(window.audioCalor){
+    window.audioCalor.pause();
+    window.audioCalor.currentTime=0;
+  }
+  document.querySelectorAll(".globo.rabia, .globo.frio, .globo.desmayo").forEach(g=>{
+    g.classList.remove("rabia","frio","desmayo");
   });
   paginas.forEach(p => p.classList.remove("activa"));
   paginas[pagina].classList.add("activa");
@@ -701,9 +716,14 @@ async function asegurarSensores(){
     if(actual && actual.classList.contains("enfermedad")){
       const globo=actual.querySelector(".inestable");
       if(globo){
-        const gamma=Math.max(-30,Math.min(30,e.gamma||0));
-        const beta=Math.max(-30,Math.min(30,(e.beta||0)-45));
-        globo.style.transform=`translate(${gamma*.35}px,${beta*.18}px) rotate(${gamma*.12}deg)`;
+        const gamma=Math.max(-45,Math.min(45,e.gamma||0));
+        const beta=Math.max(-45,Math.min(45,(e.beta||0)-45));
+        if(Math.abs(gamma)>24 || Math.abs(beta)>28){
+          globo.style.transform="";
+          globo.classList.add("desmayo");
+        }else if(!globo.classList.contains("desmayo")){
+          globo.style.transform=`translate(${gamma*.35}px,${beta*.18}px) rotate(${gamma*.12}deg)`;
+        }
       }
     }
   });
@@ -729,7 +749,10 @@ async function detectarSoplido(){
 
 function efectosDePagina(){
   detenerMiedo();
-  document.querySelectorAll(".inestable").forEach(g=>g.style.transform="");
+  document.querySelectorAll(".inestable").forEach(g=>{
+    g.style.transform="";
+    g.classList.remove("desmayo");
+  });
   const actual=paginas[pagina];
   if(!actual) return;
   // El primer aliento ocurre automáticamente una vez que ya existe interacción del usuario.
@@ -767,14 +790,10 @@ function simularInteraccion(tipo){
     ],{duration:720,iterations:3,easing:"ease-in-out"});
     setTimeout(()=>globo.classList.remove("pulso"),2200);
   }
-  if(tipo==="inclina"){
-    globo.animate([
-      {transform:"translate(0,0) rotate(0deg)"},
-      {transform:"translate(-10px,5px) rotate(-4deg)"},
-      {transform:"translate(11px,-4px) rotate(4deg)"},
-      {transform:"translate(-6px,3px) rotate(-2deg)"},
-      {transform:"translate(0,0) rotate(0deg)"}
-    ],{duration:1500,easing:"ease-in-out"});
+  if(tipo==="desmayo"){
+    globo.classList.remove("desmayo");
+    void globo.offsetWidth;
+    globo.classList.add("desmayo");
   }
 }
 
