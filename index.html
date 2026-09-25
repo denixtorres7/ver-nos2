@@ -554,12 +554,57 @@ const metricas={
   inicio:new Date().toISOString(),
   dispositivo: matchMedia("(hover:hover) and (pointer:fine)").matches ? "computador" :
                (Math.min(screen.width,screen.height)>=600 ? "tableta" : "movil"),
-  eventos:[]
+  eventos:[],
+  pais:"", ciudad:"",
+  revelacion:false, relectura:false, finalizo:false,
+  reinicios:0, modosExplorados:new Set(), enviadosHasta:0
 };
+const METRICAS_ENDPOINT='https://script.google.com/macros/s/AKfycbxuVHDEh57usvTXxYDlApKhFtpNuqe_ed8mXyGwN84AA1ri4cMAS2b-hwZXZeaVW6Pkeg/exec';
+const VERSION_OBRA="v0.22";
+let temporizadorEnvio=null;
+
 function registrarEvento(tipo, detalle={}){
   metricas.eventos.push({tipo,detalle,t:Math.round(performance.now())});
-  // Mientras no exista endpoint, queda solo en memoria de esta sesión.
+  if(tipo==="voltear_releer") metricas.relectura=true;
+  if(tipo==="modo_color" && detalle.modo) metricas.modosExplorados.add(detalle.modo);
+  if(tipo==="reinicio") metricas.reinicios++;
+  clearTimeout(temporizadorEnvio);
+  temporizadorEnvio=setTimeout(()=>enviarPendientes(false),5000);
 }
+function paquete(incluirSesion=false){
+  return {
+    sessionId:metricas.sesion, version:VERSION_OBRA,
+    eventos:metricas.eventos.slice(metricas.enviadosHasta),
+    sesion:incluirSesion ? {
+      inicio:metricas.inicio, fin:new Date().toISOString(),
+      pais:metricas.pais, ciudad:metricas.ciudad,
+      dispositivo:metricas.dispositivo, duracionMs:Math.round(performance.now()),
+      revelacion:metricas.revelacion, relectura:metricas.relectura,
+      finalizo:metricas.finalizo, reinicios:metricas.reinicios,
+      modosExplorados:[...metricas.modosExplorados]
+    }:null
+  };
+}
+async function enviarPendientes(incluirSesion=false){
+  const p=paquete(incluirSesion);
+  if(!p.eventos.length && !incluirSesion) return;
+  const hasta=metricas.eventos.length;
+  try{
+    await fetch(METRICAS_ENDPOINT,{method:"POST",mode:"no-cors",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify(p),keepalive:true});
+    metricas.enviadosHasta=hasta;
+  }catch(e){}
+}
+function enviarCierre(){
+  const body=JSON.stringify(paquete(true));
+  try{
+    fetch(METRICAS_ENDPOINT,{method:"POST",mode:"no-cors",body,keepalive:true});
+  }catch(e){}
+}
+window.addEventListener("pagehide",enviarCierre);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden") enviarCierre();});
+
 function cerrarAvisoDatos(){
   document.getElementById("avisoDatos")?.classList.add("oculto");
   registrarEvento("aviso_datos_entendido");
@@ -613,6 +658,12 @@ function mostrar(){
   paginas.forEach(p => p.classList.remove("activa"));
   paginas[pagina].classList.add("activa");
   registrarEvento("pagina", {indice:pagina, reversa});
+  if(pagina===idxRevelacion) metricas.revelacion=true;
+  if(pagina===idxCierre && !metricas.finalizo){
+    metricas.finalizo=true;
+    registrarEvento("finalizo");
+    enviarPendientes(true);
+  }
 
   if(pagina >= idxRevelacion || reversa){
     document.getElementById("modoFlotante").classList.remove("oculto");
@@ -694,6 +745,7 @@ function voltearYReleer(){
 }
 
 function reiniciar(){
+  registrarEvento("reinicio");
   pagina = 0;
   reversa = false;
   ultimaOrientacionColor=null;
@@ -1036,6 +1088,7 @@ document.addEventListener("touchend", e => {
   touchStartX = null;
 });
 
+setInterval(()=>enviarPendientes(false),15000);
 mostrar();
 </script>
 
