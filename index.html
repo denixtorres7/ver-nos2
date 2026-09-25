@@ -560,7 +560,19 @@ const metricas={
   reinicios:0, modosExplorados:new Set(), enviadosHasta:0
 };
 const METRICAS_ENDPOINT='https://script.google.com/macros/s/AKfycbxuVHDEh57usvTXxYDlApKhFtpNuqe_ed8mXyGwN84AA1ri4cMAS2b-hwZXZeaVW6Pkeg/exec';
-const VERSION_OBRA="v0.22";
+const VERSION_OBRA="v0.23";
+async function obtenerUbicacionAproximada(){
+  try{
+    const r=await fetch("https://ipapi.co/json/");
+    if(!r.ok) return;
+    const d=await r.json();
+    metricas.pais=d.country_name || d.country || "";
+    metricas.ciudad=d.city || "";
+    registrarEvento("ubicacion_aproximada",{pais:metricas.pais,ciudad:metricas.ciudad});
+    enviarPendientes(false);
+  }catch(e){}
+}
+obtenerUbicacionAproximada();
 let temporizadorEnvio=null;
 
 function registrarEvento(tipo, detalle={}){
