@@ -228,6 +228,7 @@ p{
 @media (hover:hover) and (pointer:fine){
   .simulador-desktop{display:inline-block}
 }
+#mantenerMiedo{touch-action:none;-webkit-user-select:none;user-select:none}
 .indicacion{
   font-size:14px;
   font-weight:800;
@@ -379,6 +380,25 @@ select{
   .globo{min-height:250px;padding:24px}
   .texto{font-size:clamp(26px,7vw,52px)}
 }
+
+.qr-ponencia{
+  display:none;
+  position:fixed;
+  left:16px;
+  top:16px;
+  z-index:35;
+  width:138px;
+  padding:9px;
+  background:rgba(255,250,242,.96);
+  border:2px solid var(--tinta);
+  border-radius:16px;
+  text-align:center;
+}
+.qr-ponencia img{display:block;width:116px;height:116px;margin:auto}
+.qr-ponencia span{display:block;font-size:11px;font-weight:800;line-height:1.15;margin-top:5px}
+@media (hover:hover) and (pointer:fine){
+  .qr-ponencia{display:block}
+}
 </style>
 </head>
 
@@ -423,6 +443,11 @@ select{
 <aside class="aviso-datos" id="avisoDatos" aria-label="Información sobre métricas">
   <p><strong>Sobre esta experiencia:</strong> ver)nos( registra de forma anónima datos de interacción —por ejemplo, tipo de dispositivo, pantallas recorridas, tiempo de uso e interacciones activadas— para comprender cómo se usa y mejorar la obra. No solicita nombre, correo ni otros datos de identificación y no utiliza cookies de seguimiento.</p>
   <button onclick="cerrarAvisoDatos()">Entendido</button>
+</aside>
+
+<aside class="qr-ponencia" aria-label="Acceder a ver)nos( desde el celular">
+  <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAEYAQAAAACv9dQhAAABqUlEQVR4nO2ZwW7DMAxD+Yb+/y9zB1puOgzraaqAOG2BxCFQQpAoysZ6e329hxzMwRzML9dDErm1MBZWfrU6jnN3fGRJQlg7LLhW53HuxwCSRGWOuawO5fwZjDFC/gvTyWcSxgmP5aqyz/KZgHlIUqVLArQXKommce7EyK4w+Mdnv5/GuTt/ttiwskfisjqOczcmYoMUDyRjGXYDm8i5GQNy2roFQshUMg3l3IiJZzZKZVnLP0ebZnLuwUR/rOiNWWodB7QSaBrnT9SXYQUK5QbqaSjnNkwiYSI8yxxS35mcuzDUFGqM1uC1JviaM6ZxbvfPCQpbhlbq2Jnpp3Hux1gGG6WDpd5cLnEm5x6MbKeN284Epmc70+3niy9ptawlzXtUtcXxP9k/JHM7KsHeOn33+toYs8qsurpUA9hYzg2YmrGe91zS6fjnl5MKqsoSodrkmMa5X3+k7RG3S/TeAprG+QPz+zqpqKJyljjzxSuGbHSA44fw3fX5cX0gEcHUEQanv0t7k35vIZYA6fb5E/8M1H5GnX6xlWgm5ybM1f/8938dzMHcDfMNbey8JVHAZ9gAAAAASUVORK5CYII=" alt="Código QR para abrir ver)nos( en el celular">
+  <span>Experimenta en tu celular</span>
 </aside>
 
 <main id="libro">
@@ -656,6 +681,8 @@ function mostrarModosYVoltear(){
 
 function voltearYReleer(){
   registrarEvento("voltear_releer",{metodo: matchMedia("(hover:hover) and (pointer:fine)").matches ? "boton_escritorio" : "dispositivo"});
+  bloqueoOrientacionHasta=Date.now()+900;
+  ultimaOrientacionColor=null;
   libro.classList.add("invertido");
   reversa = true;
   intercambiarExtremos();
@@ -663,11 +690,15 @@ function voltearYReleer(){
   pagina = idxSelector;
   document.getElementById("modoFlotante").classList.remove("oculto");
   mostrar();
+  setTimeout(aplicarModoPorOrientacion,1000);
 }
 
 function reiniciar(){
   pagina = 0;
   reversa = false;
+  ultimaOrientacionColor=null;
+  const avisoOrientacion=document.getElementById("orientacionModo");
+  if(avisoOrientacion) avisoOrientacion.textContent="";
   restaurarExtremos();
   libro.classList.remove("invertido");
   document.getElementById("modoFlotante").classList.add("oculto");
@@ -735,21 +766,51 @@ function activarFrio(){
 function latido(){
   const ctx=contextoAudio();
   const ahora=ctx.currentTime;
-  // Dos golpes graves "lub-dub", con entrada corta y caída redonda.
-  [0, .18].forEach((offset,i)=>{
+
+  // Háptica: funciona en navegadores/dispositivos que implementan Vibration API.
+  if(navigator.vibrate) navigator.vibrate([70,105,50]);
+
+  // "Lub-dub" audible también en altavoces pequeños de celular.
+  // La versión anterior estaba casi toda entre 42–72 Hz: demasiado grave para muchos teléfonos.
+  [
+    {offset:0,   f0:145, f1:82,  vol:.32, dur:.16},
+    {offset:.19, f0:120, f1:72,  vol:.24, dur:.14}
+  ].forEach(g=>{
     const osc=ctx.createOscillator();
     const gain=ctx.createGain();
     const filtro=ctx.createBiquadFilter();
+
     osc.type="sine";
-    osc.frequency.setValueAtTime(i===0 ? 72 : 58, ahora+offset);
-    osc.frequency.exponentialRampToValueAtTime(42, ahora+offset+.16);
-    filtro.type="lowpass"; filtro.frequency.value=180;
-    gain.gain.setValueAtTime(.0001, ahora+offset);
-    gain.gain.exponentialRampToValueAtTime(i===0 ? .18 : .13, ahora+offset+.018);
-    gain.gain.exponentialRampToValueAtTime(.0001, ahora+offset+.19);
-    osc.connect(filtro); filtro.connect(gain); gain.connect(ctx.destination);
-    osc.start(ahora+offset); osc.stop(ahora+offset+.22);
+    osc.frequency.setValueAtTime(g.f0, ahora+g.offset);
+    osc.frequency.exponentialRampToValueAtTime(g.f1, ahora+g.offset+g.dur);
+
+    filtro.type="lowpass";
+    filtro.frequency.value=420;
+
+    gain.gain.setValueAtTime(.0001, ahora+g.offset);
+    gain.gain.exponentialRampToValueAtTime(g.vol, ahora+g.offset+.012);
+    gain.gain.exponentialRampToValueAtTime(.0001, ahora+g.offset+g.dur);
+
+    osc.connect(filtro);
+    filtro.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ahora+g.offset);
+    osc.stop(ahora+g.offset+g.dur+.03);
   });
+
+  // Ataque suave con ruido filtrado: ayuda a que el golpe se perciba
+  // sin convertirlo en un "clic" o disparo.
+  const dur=.055;
+  const buffer=ctx.createBuffer(1,Math.floor(ctx.sampleRate*dur),ctx.sampleRate);
+  const data=buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1)*(1-i/data.length);
+  const src=ctx.createBufferSource();
+  const bp=ctx.createBiquadFilter();
+  const ng=ctx.createGain();
+  bp.type="bandpass"; bp.frequency.value=240; bp.Q.value=.9;
+  ng.gain.value=.035;
+  src.buffer=buffer; src.connect(bp); bp.connect(ng); ng.connect(ctx.destination);
+  src.start(ahora);
 }
 let miedoInicio=0;
 let miedoTimeout=null;
@@ -781,6 +842,8 @@ function detenerSonidoMiedo(){
 function iniciarMiedo(){
   registrarEvento("miedo_inicio");
   if(!paginas[pagina].classList.contains("miedo-pagina")) return;
+  const ctx=contextoAudio();
+  if(ctx.state==="suspended") ctx.resume();
   const globo=paginas[pagina].querySelector(".globo");
   globo.classList.add("pulso");
   globo.style.animationDuration=".82s";
@@ -790,10 +853,6 @@ function iniciarMiedo(){
     const t=(performance.now()-inicioPulso)/1000;
     globo.style.animationDuration=Math.max(.39,.82-t*.062)+"s";
   },250);
-  if(navigator.vibrate) navigator.vibrate([80,620,80,620,80]);
-  miedoInterval=setInterval(()=>{
-    if(navigator.vibrate) navigator.vibrate([80,620,80]);
-  },1450);
 }
 function detenerMiedo(){
   registrarEvento("miedo_fin");
@@ -868,8 +927,22 @@ function efectosDePagina(){
 
 const mantener=document.getElementById("mantenerMiedo");
 if(mantener){
-  ["pointerdown","touchstart"].forEach(ev=>mantener.addEventListener(ev,e=>{e.preventDefault();iniciarMiedo();},{passive:false}));
-  ["pointerup","pointercancel","pointerleave","touchend","touchcancel"].forEach(ev=>mantener.addEventListener(ev,detenerMiedo));
+  const empezarMiedo=e=>{
+    e.preventDefault();
+    if(mantener.setPointerCapture && e.pointerId!==undefined){
+      try{mantener.setPointerCapture(e.pointerId);}catch(_){}
+    }
+    iniciarMiedo();
+  };
+  if(window.PointerEvent){
+    mantener.addEventListener("pointerdown",empezarMiedo,{passive:false});
+    mantener.addEventListener("pointerup",detenerMiedo);
+    mantener.addEventListener("pointercancel",detenerMiedo);
+  }else{
+    mantener.addEventListener("touchstart",empezarMiedo,{passive:false});
+    mantener.addEventListener("touchend",detenerMiedo);
+    mantener.addEventListener("touchcancel",detenerMiedo);
+  }
 }
 
 
@@ -904,6 +977,42 @@ function simularInteraccion(tipo){
   }
 }
 
+
+let ultimaOrientacionColor=null;
+let bloqueoOrientacionHasta=0;
+
+function aplicarModoPorOrientacion(){
+  if(!reversa) return;
+  // Evita pelear con el giro inicial mientras entra en la relectura.
+  if(Date.now()<bloqueoOrientacionHasta) return;
+
+  const angle=(screen.orientation && typeof screen.orientation.angle==="number")
+    ? ((screen.orientation.angle%360)+360)%360
+    : (typeof window.orientation==="number" ? ((window.orientation%360)+360)%360 : null);
+
+  let modo=null, etiqueta="";
+  if(angle===0){
+    modo="normal"; etiqueta="Vertical · color habitual";
+  }else if(angle===180){
+    modo="deuteranopia"; etiqueta="Vertical volteado · deuteranopía";
+  }else if(angle===90){
+    modo="protanopia"; etiqueta="Horizontal · protanopía";
+  }else if(angle===270){
+    modo="tritanopia"; etiqueta="Horizontal volteado · tritanopía";
+  }
+  if(!modo || modo===ultimaOrientacionColor) return;
+
+  ultimaOrientacionColor=modo;
+  cambiarModo(modo);
+  registrarEvento("modo_por_orientacion",{angulo:angle,modo});
+  const aviso=document.getElementById("orientacionModo");
+  if(aviso) aviso.textContent=etiqueta;
+}
+
+window.addEventListener("orientationchange",()=>setTimeout(aplicarModoPorOrientacion,180));
+if(screen.orientation && screen.orientation.addEventListener){
+  screen.orientation.addEventListener("change",()=>setTimeout(aplicarModoPorOrientacion,120));
+}
 document.addEventListener("keydown", e => {
   if(e.key === "ArrowRight") siguiente();
   if(e.key === "ArrowLeft") anterior();
